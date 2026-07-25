@@ -1,4 +1,9 @@
-(defparameter engine-state
+(defstruct discrete-point
+    (neighbors '()))
+
+(make-discrete-point :neighbors nil)
+
+(defparameter *engine-state*
     '(0 0 0 0))
 
 (defun generate-points ()
@@ -8,17 +13,17 @@
     nil
     )
 
-(defparameter discrete
+(defparameter *pde-map*
     (generate-points))
 
-(defun cycle (engine-state)
-    (incf (second engine-state)))
+(defun cycle (engine)
+    (incf (second *engine-state*)))
 
-(defun ignition (engine-state)
+(defun ignition (engine-statae)
     ;; establish heat/strain PDEs
     ;; linkage constraint sim
     ;; actuator linkage position
     )
 
-(cycle engine-state)
-(print engine-state)
+(cycle '*engine-state*)
+(print *engine-state*)
