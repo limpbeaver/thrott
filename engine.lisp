@@ -1,14 +1,24 @@
-(defparameter engine
+(defparameter engine-state
     '(0 0 0 0))
 
-(defun cycle (engine)
-    (incf (second engine)))
+(defun generate-points ()
+    ;; neighborhood topology
+    ;; distance
+    ;; heat equation
+    nil
+    )
 
-(defun ignition (engine)
+(defparameter discrete
+    (generate-points))
+
+(defun cycle (engine-state)
+    (incf (second engine-state)))
+
+(defun ignition (engine-state)
     ;; establish heat/strain PDEs
     ;; linkage constraint sim
     ;; actuator linkage position
     )
 
-(cycle engine)
-(print engine)
+(cycle engine-state)
+(print engine-state)
