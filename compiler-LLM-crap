@@ -1,106 +1,11 @@
 (in-package :indigo.tests)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (ql:quickload '(:vecto :skippy :prove :cl-svg :cl-librsvg)))
+  (ql:quickload '(:vecto :skippy :prove)))
 
 (plan nil)
 
 (defparameter *test-material* 'heavy-iron)
-
-(data Register
-  RAX
-  RBX
-  RCX
-  RDX)
-
-(data AsmInstr
-  (Mov Register Integer)
-  (Add Register Register)
-  (Sub Register Register)
-  (Mul Register Register)
-  (Push Register)
-  (Pop Register))
-
-(data Expr
-  (Val Integer)
-  (Plus Expr Expr)
-  (Minus Expr Expr)
-  (Times Expr Expr))
-
-(data AsmStream
-  (Single AsmInstr)
-  (Seq AsmInstr AsmStream)
-  EmptyStream)
-
-(def combineStream
-  EmptyStream stream2 stream2
-  (Single i1) stream2 (Seq i1 stream2)
-  (Seq i1 rest) stream2 (Seq i1 (combineStream rest stream2)))
-
-(def compileExpr
-  (Val n) 
-  (Single (Mov RAX n))
-
-  (Plus left right)
-  (combineStream 
-   (compileExpr left)
-   (combineStream 
-    (Single (Push RAX))
-    (combineStream 
-     (compileExpr right)
-     (combineStream 
-      (Single (Mov RBX RAX))
-      (combineStream 
-       (Single (Pop RAX))
-       (Single (Add RAX RBX)))))))
-
-  (Minus left right)
-  (combineStream 
-   (compileExpr left)
-   (combineStream 
-    (Single (Push RAX))
-    (combineStream 
-     (compileExpr right)
-     (combineStream 
-      (Single (Mov RBX RAX))
-      (combineStream 
-       (Single (Pop RAX))
-       (Single (Sub RAX RBX)))))))
-
-  (Times left right)
-  (combineStream 
-   (compileExpr left)
-   (combineStream 
-    (Single (Push RAX))
-    (combineStream 
-     (compileExpr right)
-     (combineStream 
-      (Single (Mov RBX RAX))
-      (combineStream 
-       (Single (Pop RAX))
-       (Single (Mul RAX RBX))))))))
-
-(defun reg-to-string (r)
-  (match r
-    (RAX "rax")
-    (RBX "rbx")
-    (RCX "rcx")
-    (RDX "rdx")))
-
-(defun emitAsm (stream)
-  (match stream
-    (EmptyStream "")
-    ((Single instr)
-     (match instr
-       ((Mov r imm)  (format nil "    mov ~a, ~a~%" (reg-to-string r) imm))
-       ((Add r1 r2)  (format nil "    add ~a, ~a~%" (reg-to-string r1) (reg-to-string r2)))
-       ((Sub r1 r2)  (format nil "    sub ~a, ~a~%" (reg-to-string r1) (reg-to-string r2)))
-       ((Mul r1 r2)  (format nil "    imul ~a, ~a~%" (reg-to-string r1) (reg-to-string r2)))
-       ((Push r)     (format nil "    push ~a~%" (reg-to-string r)))
-       ((Pop r)      (format nil "    pop ~a~%" (reg-to-string r)))))
-    ((Seq instr rest)
-     (concatenate 'string (emitAsm (Single instr)) (emitAsm rest)))))
-
 
 (data Linkage
   Direct
@@ -178,18 +83,8 @@
           do (render-clock-frame state i data-stream))
     (skippy:output-data-stream data-stream filepath)))
 
-(subtest "Compiler Test: AST to x86-64 Stream Generation"
-  (let* ((ast (Plus (Val 10) (Val 5)))
-         (asm (compileExpr ast)))
-    (ok (is-type asm 'AsmStream))
-    (ok (is (emitAsm asm)
-            "    mov rax, 10
-    push rax
-    mov rax, 5
-    mov rbx, rax
-    pop rax
-    add rax, rbx
-"))))
+(defun clock-sequence->wolfram-expr (states)
+  (format nil "polar plot r(t) for t from 0 to 2*pi"))
 
 (subtest "Animated Full Radial Cycle with Weighty Linkage"
   (let* ((c0 (Started 0.0 10.0 (Weighty 50.0) *test-material*))
@@ -200,6 +95,7 @@
          (states (list c0 c1 c2 c3 c4))
          (gif-path "/tmp/clock_linkage.gif"))
 
+    ;; Run GIF generation alongside assertion
     (generate-clock-gif states gif-path)
     
     (ok (probe-file gif-path) "GIF generated.")
