@@ -1,2 +1,103 @@
-;; field data
-nil
+(in-package :indigo.tests)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (ql:quickload '(:vecto :skippy :prove)))
+
+(plan nil)
+
+(defparameter *test-material* 'heavy-iron)
+
+(data Linkage
+  Direct
+  (Weighty Double))
+
+(data Clock
+  Unwound
+  Froze
+  (Started Double Double Linkage Material)
+  (Running Double Double Linkage Material)
+  (Stopped Double Double Linkage Material))
+
+(def clockTick
+  Unwound Unwound
+  Froze Froze
+
+  (Started angle radius (Weighty mass) mat)
+  (Running 90.0 (+ radius (* mass 0.1)) (Weighty mass) mat)
+
+  (Running 90.0 radius (Weighty mass) mat)
+  (Running 180.0 (+ radius (* mass 0.2)) (Weighty mass) mat)
+
+  (Running 180.0 radius (Weighty mass) mat)
+  (Running 270.0 radius (Weighty mass) mat)
+
+  (Running 270.0 radius (Weighty mass) mat)
+  (Running 0.0 (- radius (* mass 0.3)) (Weighty mass) mat)
+
+  (Stopped angle radius link mat)
+  Froze)
+
+(defun render-clock-frame (clock frame-num stream)
+  (let ((width 300)
+        (height 300)
+        (center 150.0))
+    (vecto:with-canvas (:width width :height height)
+      (vecto:set-rgb-fill 0.1 0.1 0.12)
+      (vecto:rectangle 0 0 width height)
+      (vecto:fill-path)
+
+      (vecto:set-rgb-stroke 0.3 0.3 0.35)
+      (vecto:set-line-width 2.0)
+      (vecto:arc center center 80.0 0 (* 2 pi))
+      (vecto:stroke)
+
+      ;; Draw Clock State
+      (typecase clock
+        (Clock
+         (match clock
+           ((Running angle radius (Weighty mass) _)
+            (let* ((rad (* angle (/ pi 180.0)))
+                   (x (+ center (* radius (cos rad))))
+                   (y (+ center (* radius (sin rad)))))
+
+              (vecto:set-rgb-stroke 0.2 0.7 0.9)
+              (vecto:set-line-width 4.0)
+              (vecto:move-to center center)
+              (vecto:line-to x y)
+              (vecto:stroke)
+
+              (vecto:set-rgb-fill 0.9 0.3 0.2)
+              (vecto:arc x y 
+                         (+ 6.0 (* mass 0.1)) 0 (* 2 pi))
+              (vecto:fill-path))))))
+
+      (let* ((png-bytes (vecto:with-output-to-sequence ()
+                          (vecto:save-png-stream vecto:*canvas*)))
+             (image (skippy:read-png-stream png-bytes)))
+        (skippy:add-frame image stream)))))
+
+(defun generate-clock-gif (clock-sequence filepath)
+  (let ((data-stream (skippy:make-data-stream 
+                      :width 300 :height 300 :loop-count 0)))
+    (loop for state in clock-sequence
+          for i from 0
+          do (render-clock-frame state i data-stream))
+    (skippy:output-data-stream data-stream filepath)))
+
+(subtest "Animated Full Radial Cycle with Weighty Linkage"
+  (let* ((c0 (Started 0.0 10.0 (Weighty 50.0) *test-material*))
+         (c1 (clockTick c0))  ;; 90.0 deg,  r = 15.0
+         (c2 (clockTick c1))  ;; 180.0 deg, r = 25.0
+         (c3 (clockTick c2))  ;; 270.0 deg, r = 25.0
+         (c4 (clockTick c3))  ;; 0.0 deg,   r = 10.0
+         (states (list c0 c1 c2 c3 c4))
+         (gif-path "/tmp/clock_linkage.gif"))
+
+    ;; Run GIF generation alongside assertion
+    (generate-clock-gif states gif-path)
+    
+    (ok (probe-file gif-path) "GIF animation successfully generated.")
+    (ok (is c4 (Running 0.0 10.0 (Weighty 50.0) *test-material*))
+        "Clock completed full orbital sweep and returned to baseline radius.")))
+
+(finalize)
