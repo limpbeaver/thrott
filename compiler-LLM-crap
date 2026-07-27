@@ -1,0 +1,209 @@
+(in-package :indigo.tests)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (ql:quickload '(:vecto :skippy :prove :cl-svg :cl-librsvg)))
+
+(plan nil)
+
+(defparameter *test-material* 'heavy-iron)
+
+(data Register
+  RAX
+  RBX
+  RCX
+  RDX)
+
+(data AsmInstr
+  (Mov Register Integer)
+  (Add Register Register)
+  (Sub Register Register)
+  (Mul Register Register)
+  (Push Register)
+  (Pop Register))
+
+(data Expr
+  (Val Integer)
+  (Plus Expr Expr)
+  (Minus Expr Expr)
+  (Times Expr Expr))
+
+(data AsmStream
+  (Single AsmInstr)
+  (Seq AsmInstr AsmStream)
+  EmptyStream)
+
+(def combineStream
+  EmptyStream stream2 stream2
+  (Single i1) stream2 (Seq i1 stream2)
+  (Seq i1 rest) stream2 (Seq i1 (combineStream rest stream2)))
+
+(def compileExpr
+  (Val n) 
+  (Single (Mov RAX n))
+
+  (Plus left right)
+  (combineStream 
+   (compileExpr left)
+   (combineStream 
+    (Single (Push RAX))
+    (combineStream 
+     (compileExpr right)
+     (combineStream 
+      (Single (Mov RBX RAX))
+      (combineStream 
+       (Single (Pop RAX))
+       (Single (Add RAX RBX)))))))
+
+  (Minus left right)
+  (combineStream 
+   (compileExpr left)
+   (combineStream 
+    (Single (Push RAX))
+    (combineStream 
+     (compileExpr right)
+     (combineStream 
+      (Single (Mov RBX RAX))
+      (combineStream 
+       (Single (Pop RAX))
+       (Single (Sub RAX RBX)))))))
+
+  (Times left right)
+  (combineStream 
+   (compileExpr left)
+   (combineStream 
+    (Single (Push RAX))
+    (combineStream 
+     (compileExpr right)
+     (combineStream 
+      (Single (Mov RBX RAX))
+      (combineStream 
+       (Single (Pop RAX))
+       (Single (Mul RAX RBX))))))))
+
+(defun reg-to-string (r)
+  (match r
+    (RAX "rax")
+    (RBX "rbx")
+    (RCX "rcx")
+    (RDX "rdx")))
+
+(defun emitAsm (stream)
+  (match stream
+    (EmptyStream "")
+    ((Single instr)
+     (match instr
+       ((Mov r imm)  (format nil "    mov ~a, ~a~%" (reg-to-string r) imm))
+       ((Add r1 r2)  (format nil "    add ~a, ~a~%" (reg-to-string r1) (reg-to-string r2)))
+       ((Sub r1 r2)  (format nil "    sub ~a, ~a~%" (reg-to-string r1) (reg-to-string r2)))
+       ((Mul r1 r2)  (format nil "    imul ~a, ~a~%" (reg-to-string r1) (reg-to-string r2)))
+       ((Push r)     (format nil "    push ~a~%" (reg-to-string r)))
+       ((Pop r)      (format nil "    pop ~a~%" (reg-to-string r)))))
+    ((Seq instr rest)
+     (concatenate 'string (emitAsm (Single instr)) (emitAsm rest)))))
+
+
+(data Linkage
+  Direct
+  (Weighty Double))
+
+(data Clock
+  Unwound
+  Froze
+  (Started Double Double Linkage Material)
+  (Running Double Double Linkage Material)
+  (Stopped Double Double Linkage Material))
+
+(def clockTick
+  Unwound Unwound
+  Froze Froze
+
+  (Started angle radius (Weighty mass) _)
+  (Running 90.0 (+ radius (* mass 0.1)) (Weighty mass) *test-material*)
+
+  (Running 90.0 radius (Weighty mass) _)
+  (Running 180.0 (+ radius (* mass 0.2)) (Weighty mass) *test-material*)
+
+  (Running 180.0 radius (Weighty mass) _)
+  (Running 270.0 radius (Weighty mass) *test-material*)
+
+  (Running 270.0 radius (Weighty mass) _)
+  (Running 0.0 (- radius (* mass 0.3)) (Weighty mass) *test-material*)
+
+  (Stopped _ _ _ _) Froze
+  
+  _ Unwound)
+
+(defun render-clock-frame (clock frame-num stream)
+  (let ((width 300)
+        (height 300)
+        (center 150.0))
+    (vecto:with-canvas (:width width :height height)
+      (vecto:set-rgb-fill 0.1 0.1 0.12)
+      (vecto:rectangle 0 0 width height)
+      (vecto:fill-path)
+
+      (vecto:set-rgb-stroke 0.3 0.3 0.35)
+      (vecto:set-line-width 2.0)
+      (vecto:arc center center 80.0 0 (* 2 pi))
+      (vecto:stroke)
+
+      (typecase clock
+        (Clock
+         (match clock
+           ((Running angle radius (Weighty mass) _)
+            (let* ((rad (* angle (/ pi 180.0)))
+                   (x (+ center (* radius (cos rad))))
+                   (y (+ center (* radius (sin rad)))))
+
+              (vecto:set-rgb-stroke 0.2 0.7 0.9)
+              (vecto:set-line-width 4.0)
+              (vecto:move-to center center)
+              (vecto:line-to x y)
+              (vecto:stroke)
+
+              (vecto:set-rgb-fill 0.9 0.3 0.2)
+              (vecto:arc x y (+ 6.0 (* mass 0.1)) 0 (* 2 pi))
+              (vecto:fill-path))))))
+
+      (let* ((png-bytes (vecto:with-output-to-sequence ()
+                          (vecto:save-png-stream vecto:*canvas*)))
+             (image (skippy:read-png-stream png-bytes)))
+        (skippy:add-frame image stream)))))
+
+(defun generate-clock-gif (clock-sequence filepath)
+  (let ((data-stream (skippy:make-data-stream 
+                      :width 300 :height 300 :loop-count 0)))
+    (loop for state in clock-sequence
+          for i from 0
+          do (render-clock-frame state i data-stream))
+    (skippy:output-data-stream data-stream filepath)))
+
+(subtest "Compiler Test: AST to x86-64 Stream Generation"
+  (let* ((ast (Plus (Val 10) (Val 5)))
+         (asm (compileExpr ast)))
+    (ok (is-type asm 'AsmStream))
+    (ok (is (emitAsm asm)
+            "    mov rax, 10
+    push rax
+    mov rax, 5
+    mov rbx, rax
+    pop rax
+    add rax, rbx
+"))))
+
+(subtest "Animated Full Radial Cycle with Weighty Linkage"
+  (let* ((c0 (Started 0.0 10.0 (Weighty 50.0) *test-material*))
+         (c1 (clockTick c0))  ;; 90.0 deg,  r = 15.0
+         (c2 (clockTick c1))  ;; 180.0 deg, r = 25.0
+         (c3 (clockTick c2))  ;; 270.0 deg, r = 25.0
+         (c4 (clockTick c3))  ;; 0.0 deg,   r = 10.0
+         (states (list c0 c1 c2 c3 c4))
+         (gif-path "/tmp/clock_linkage.gif"))
+
+    (generate-clock-gif states gif-path)
+    
+    (ok (probe-file gif-path) "GIF generated.")
+    (ok (is c4 (Running 0.0 10.0 (Weighty 50.0) *test-material*))
+        "Clock completed full orbital sweep.")))
+
+(finalize)
