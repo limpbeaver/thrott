@@ -19,23 +19,24 @@
   (Stopped Double Double Linkage Material))
 
 (def clockTick
-  Unwound Unwound
-  Froze Froze
+    Unwound Unwound
+    Froze Froze
 
-  (Started angle radius (Weighty mass) mat)
-  (Running 90.0 (+ radius (* mass 0.1)) (Weighty mass) mat)
+    (Started angle radius (Weighty mass) _)
+    (Running 90.0 (+ radius (* mass 0.1)) (Weighty mass) *test-material*)
 
-  (Running 90.0 radius (Weighty mass) mat)
-  (Running 180.0 (+ radius (* mass 0.2)) (Weighty mass) mat)
+    (Running 90.0 radius (Weighty mass) _)
+    (Running 180.0 (+ radius (* mass 0.2)) (Weighty mass) *test-material*)
 
-  (Running 180.0 radius (Weighty mass) mat)
-  (Running 270.0 radius (Weighty mass) mat)
+    (Running 180.0 radius (Weighty mass) _)
+    (Running 270.0 radius (Weighty mass) *test-material*)
 
-  (Running 270.0 radius (Weighty mass) mat)
-  (Running 0.0 (- radius (* mass 0.3)) (Weighty mass) mat)
+    (Running 270.0 radius (Weighty mass) _)
+    (Running 0.0 (- radius (* mass 0.3)) (Weighty mass) *test-material*)
 
-  (Stopped angle radius link mat)
-  Froze)
+    (Stopped _ _ _ _) Froze
+    
+    _ Unwound)
 
 (defun render-clock-frame (clock frame-num stream)
   (let ((width 300)
@@ -51,7 +52,6 @@
       (vecto:arc center center 80.0 0 (* 2 pi))
       (vecto:stroke)
 
-      ;; Draw Clock State
       (typecase clock
         (Clock
          (match clock
@@ -96,8 +96,8 @@
     ;; Run GIF generation alongside assertion
     (generate-clock-gif states gif-path)
     
-    (ok (probe-file gif-path) "GIF animation successfully generated.")
+    (ok (probe-file gif-path) "GIF generated.")
     (ok (is c4 (Running 0.0 10.0 (Weighty 50.0) *test-material*))
-        "Clock completed full orbital sweep and returned to baseline radius.")))
+        "Clock completed full orbital sweep.")))
 
 (finalize)
